@@ -1,4 +1,4 @@
-const state = {
+ const state = {
             weather: null,
             forecast: [],
             particles: [],
@@ -211,7 +211,17 @@ const state = {
             const feelsLike = state.unit === 'C' ? weather.feelsLike : (weather.feelsLike * 9/5) + 32;
 
             document.getElementById('location').textContent = weather.city;
-            document.getElementById('temperature').textContent = `${Math.round(temp)}${unit}`;
+            
+            // Update temperature with special styling for cold temps
+            const tempElement = document.getElementById('temperature');
+            tempElement.textContent = `${Math.round(temp)}${unit}`;
+            tempElement.className = 'temperature';
+            if (weather.temp < 0) {
+                tempElement.classList.add('freezing');
+            } else if (weather.temp < 10) {
+                tempElement.classList.add('cold');
+            }
+            
             document.getElementById('description').textContent = weather.description;
             document.getElementById('feels-like').textContent = `Feels like ${Math.round(feelsLike)}${unit}`;
             document.getElementById('humidity').textContent = `${weather.humidity}%`;
@@ -893,21 +903,98 @@ const state = {
             document.getElementById('app').classList.add('hidden');
 
             setTimeout(() => {
+                const cityLower = city.toLowerCase().trim();
                 state.weather.city = city;
-                state.weather.temp = Math.floor(Math.random() * 20) + 10;
-                state.weather.condition = ['sunny', 'cloudy', 'rain'][Math.floor(Math.random() * 3)];
                 
-                // Update description based on condition
-                if (state.weather.condition === 'sunny') {
-                    state.weather.description = 'Clear Sky';
-                } else if (state.weather.condition === 'cloudy') {
-                    state.weather.description = 'Partly Cloudy';
-                } else if (state.weather.condition === 'rain') {
-                    state.weather.description = 'Light Rain';
+                // Predefined cities database with realistic temperature ranges
+                const cityData = {
+                    'kashmir': { lat: 34.0837, lon: 74.7973, min: -8, max: 15, zone: 'Mountain' },
+                    'srinagar': { lat: 34.0837, lon: 74.7973, min: -4, max: 18, zone: 'Mountain' },
+                    'darjeeling': { lat: 27.0360, lon: 88.2627, min: 2, max: 18, zone: 'Hill Station' },
+                    'shimla': { lat: 31.1048, lon: 77.1734, min: -2, max: 20, zone: 'Hill Station' },
+                    'manali': { lat: 32.2396, lon: 77.1887, min: -5, max: 15, zone: 'Mountain' },
+                    'ladakh': { lat: 34.1526, lon: 77.5771, min: -20, max: 10, zone: 'Cold Desert' },
+                    'leh': { lat: 34.1526, lon: 77.5771, min: -15, max: 12, zone: 'Cold Desert' },
+                    'gulmarg': { lat: 34.0484, lon: 74.3805, min: -10, max: 8, zone: 'High Mountain' },
+                    'auli': { lat: 30.5239, lon: 79.5640, min: -8, max: 10, zone: 'High Mountain' },
+                    'nainital': { lat: 29.3803, lon: 79.4636, min: 0, max: 20, zone: 'Hill Station' },
+                    'mussoorie': { lat: 30.4598, lon: 78.0644, min: 1, max: 22, zone: 'Hill Station' },
+                    'delhi': { lat: 28.7041, lon: 77.1025, min: 8, max: 42, zone: 'Subtropical' },
+                    'mumbai': { lat: 19.0760, lon: 72.8777, min: 18, max: 36, zone: 'Coastal' },
+                    'kolkata': { lat: 22.5726, lon: 88.3639, min: 15, max: 38, zone: 'Tropical' },
+                    'moscow': { lat: 55.7558, lon: 37.6173, min: -15, max: 25, zone: 'Continental' },
+                    'london': { lat: 51.5074, lon: -0.1278, min: 2, max: 25, zone: 'Temperate' },
+                    'new york': { lat: 40.7128, lon: -74.0060, min: -10, max: 32, zone: 'Continental' },
+                    'tokyo': { lat: 35.6762, lon: 139.6503, min: 0, max: 35, zone: 'Temperate' }
+                };
+                
+                let baseTemp, climateZone, foundCity = null;
+                
+                // Find matching city
+                for (const [key, value] of Object.entries(cityData)) {
+                    if (cityLower.includes(key) || key.includes(cityLower)) {
+                        foundCity = value;
+                        state.weather.lat = value.lat;
+                        state.weather.lon = value.lon;
+                        climateZone = value.zone;
+                        
+                        // Calculate seasonal temperature
+                        const month = new Date().getMonth();
+                        const tempRange = foundCity.max - foundCity.min;
+                        const midTemp = foundCity.min + tempRange / 2;
+                        
+                        let seasonFactor = 0;
+                        if (value.lat > 0) {
+                            if (month >= 11 || month <= 2) seasonFactor = -0.3;
+                            else if (month >= 6 && month <= 8) seasonFactor = 0.3;
+                        }
+                        
+                        baseTemp = Math.round(midTemp + (tempRange * seasonFactor) + (Math.random() * 6 - 3));
+                        baseTemp = Math.max(foundCity.min, Math.min(foundCity.max, baseTemp));
+                        break;
+                    }
                 }
                 
-                state.weather.lat = 37.7749 + (Math.random() - 0.5) * 10;
-                state.weather.lon = -122.4194 + (Math.random() - 0.5) * 10;
+                if (!foundCity) {
+                    // Random location
+                    const baseLat = 37.7749 + (Math.random() - 0.5) * 100;
+                    state.weather.lat = baseLat;
+                    state.weather.lon = -122.4194 + (Math.random() - 0.5) * 360;
+                    
+                    if (Math.abs(baseLat) > 66) {
+                        climateZone = 'Polar';
+                        baseTemp = Math.floor(Math.random() * 35) - 30;
+                    } else if (Math.abs(baseLat) > 45) {
+                        climateZone = 'Cold Temperate';
+                        baseTemp = Math.floor(Math.random() * 30) - 15;
+                    } else if (Math.abs(baseLat) > 23) {
+                        climateZone = 'Temperate';
+                        baseTemp = Math.floor(Math.random() * 25);
+                    } else {
+                        climateZone = 'Tropical';
+                        baseTemp = Math.floor(Math.random() * 20) + 15;
+                    }
+                }
+                
+                state.weather.temp = baseTemp;
+                state.weather.climateZone = climateZone;
+                
+                // Weather condition based on temperature
+                if (state.weather.temp < -5) {
+                    state.weather.condition = Math.random() > 0.3 ? 'snow' : 'cloudy';
+                    state.weather.description = state.weather.condition === 'snow' ? 'Snowy' : 'Overcast';
+                } else if (state.weather.temp < 10) {
+                    state.weather.condition = ['cloudy', 'rain'][Math.floor(Math.random() * 2)];
+                    state.weather.description = state.weather.condition === 'rain' ? 'Cold Rain' : 'Cloudy';
+                } else if (state.weather.temp < 20) {
+                    state.weather.condition = ['sunny', 'cloudy', 'rain'][Math.floor(Math.random() * 3)];
+                    if (state.weather.condition === 'sunny') state.weather.description = 'Partly Sunny';
+                    else if (state.weather.condition === 'cloudy') state.weather.description = 'Partly Cloudy';
+                    else state.weather.description = 'Light Rain';
+                } else {
+                    state.weather.condition = Math.random() > 0.3 ? 'sunny' : 'cloudy';
+                    state.weather.description = state.weather.condition === 'sunny' ? 'Clear Sky' : 'Partly Cloudy';
+                }
                 
                 // Update weather details
                 state.weather.humidity = 40 + Math.floor(Math.random() * 50);
@@ -994,6 +1081,21 @@ const state = {
                 updateAQI();
                 initParticles();
                 createCharts();
+                
+                // Show temperature info alert
+                let tempInfo = '';
+                if (state.weather.temp < 0) {
+                    tempInfo = `❄️ Freezing temperatures detected in ${city}`;
+                } else if (state.weather.temp < 10) {
+                    tempInfo = `🌡️ Cold weather in ${city} (${state.weather.climateZone})`;
+                } else if (state.weather.temp > 30) {
+                    tempInfo = `🔥 Hot weather in ${city} (${state.weather.climateZone})`;
+                }
+                
+                if (tempInfo) {
+                    displayAlerts([{ type: 'info', message: tempInfo }]);
+                    setTimeout(() => displayAlerts([]), 5000); // Clear after 5 seconds
+                }
                 
                 // Fix map reinitialization with proper cleanup
                 if (state.map) {
