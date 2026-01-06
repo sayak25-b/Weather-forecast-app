@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="weather.css">
+</head>
+<body>
+     <div id="loading" class="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <div id="app" class="weather-container hidden">
+        <canvas id="particles-canvas"></canvas>
+        
+        <div class="content">
+            <!-- Top Controls -->
+            <div class="top-controls">
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <button class="unit-toggle" id="unit-toggle">°C / °F</button>
+                    <select class="lang-select" id="lang-select">
+                        <option value="en">English</option>
+                        <option value="hi">हिंदी</option>
+                        <option value="bn">বাংলা</option>
+                        <option value="es">Español</option>
+                        <option value="fr">Français</option>
+                    </select>
+                    <input type="date" id="date-picker" class="unit-toggle" style="padding: 0.75rem 1rem;">
+                </div>
+                <button class="voice-btn" id="voice-btn">
+                    <span>🎤</span>
+                    <span id="voice-text">Voice Assistant</span>
+                </button>
+            </div>
+
+            <!-- Weather Alerts -->
+            <div id="alerts-container"></div>
+
+            <!-- Search Bar -->
+            <div class="search-container">
+                <div class="search-box">
+                    <input 
+                        type="text" 
+                        id="search-input" 
+                        class="search-input" 
+                        placeholder="Search for a city..."
+                    >
+                    <button class="search-btn" id="search-btn">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Weather Card -->
+            <div class="weather-card">
+                <div class="location-header">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <h1 class="location-title" id="location">San Francisco</h1>
+                </div>
+
+                <div class="weather-main">
+                    <div class="weather-icon" id="main-icon">☁️</div>
+                    <div class="weather-temp-info">
+                        <div class="temperature" id="temperature">18°C</div>
+                        <p class="weather-description" id="description">Partly Cloudy</p>
+                        <p class="feels-like" id="feels-like">Feels like 16°C</p>
+                    </div>
+                </div>
+
+                <!-- Sunrise & Sunset -->
+                <div class="sun-times">
+                    <div class="sun-time-item">
+                        <div class="sun-animation">🌅</div>
+                        <div class="sun-time-text">
+                            <div class="sun-time-label">Sunrise</div>
+                            <div class="sun-time-value" id="sunrise">6:30 AM</div>
+                        </div>
+                    </div>
+                    <div class="sun-time-item">
+                        <div class="sunset-animation">🌇</div>
+                        <div class="sun-time-text">
+                            <div class="sun-time-label">Sunset</div>
+                            <div class="sun-time-value" id="sunset">7:45 PM</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AQI Section -->
+            <div class="aqi-section">
+                <div class="aqi-header">
+                    <h2 class="aqi-title">🌬️ Air Quality Index</h2>
+                    <div class="aqi-value">
+                        <div class="aqi-number aqi-good" id="aqi-number">42</div>
+                        <div class="aqi-label" id="aqi-label">Good</div>
+                    </div>
+                </div>
+
+                <div class="aqi-pollutants">
+                    <div class="pollutant-card">
+                        <div class="pollutant-name">PM2.5</div>
+                        <div class="pollutant-value" id="pm25">12 µg/m³</div>
+                    </div>
+                    <div class="pollutant-card">
+                        <div class="pollutant-name">PM10</div>
+                        <div class="pollutant-value" id="pm10">25 µg/m³</div>
+                    </div>
+                    <div class="pollutant-card">
+                        <div class="pollutant-name">CO</div>
+                        <div class="pollutant-value" id="co">0.3 ppm</div>
+                    </div>
+                    <div class="pollutant-card">
+                        <div class="pollutant-name">NO₂</div>
+                        <div class="pollutant-value" id="no2">18 µg/m³</div>
+                    </div>
+                </div>
+
+                <div class="health-suggestion" id="health-suggestion">
+                    ✅ Air quality is satisfactory. Enjoy outdoor activities!
+                </div>
+            </div>
+
+            <!-- Weather Details Grid -->
+            <div class="details-grid">
+                <div class="detail-card">
+                    <div class="detail-icon">💧</div>
+                    <div class="detail-label">Humidity</div>
+                    <div class="detail-value" id="humidity">65%</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-icon">💨</div>
+                    <div class="detail-label">Wind Speed</div>
+                    <div class="detail-value" id="wind-speed">12 km/h</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-icon">👁️</div>
+                    <div class="detail-label">Visibility</div>
+                    <div class="detail-value" id="visibility">10 km</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-icon">🌡️</div>
+                    <div class="detail-label">Pressure</div>
+                    <div class="detail-value" id="pressure">1013 hPa</div>
+                </div>
+            </div>
+
+            <!-- Interactive Charts -->
+            <div class="charts-section">
+                <div class="chart-container">
+                    <h3 class="chart-title">📈 24-Hour Temperature Trend</h3>
+                    <canvas id="temp-chart" class="chart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3 class="chart-title">🌧️ Rain Probability (7-Day)</h3>
+                    <canvas id="rain-chart" class="chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Map View -->
+            <div class="map-section">
+                <h2 class="map-title">🗺️ Weather Map</h2>
+                <div id="weather-map"></div>
+            </div>
+
+            <!-- 7-Day Forecast -->
+            <div class="forecast-card">
+                <h2 class="forecast-title">
+                    ☁️ 7-Day Forecast
+                </h2>
+                <div class="forecast-grid" id="forecast-grid">
+                    <!-- Forecast items will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+ <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="weather.js"></script>
+</body>
+</html>
