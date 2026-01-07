@@ -79,7 +79,7 @@
             gap: 1rem;
         }
 
-        .unit-toggle, .lang-select, .voice-btn {
+        .unit-toggle, .lang-select, .voice-btn, .mode-btn {
             background: rgba(255, 255, 255, 0.2);
             backdrop-filter: blur(10px);
             border: none;
@@ -91,9 +91,22 @@
             transition: all 0.3s ease;
         }
 
-        .unit-toggle:hover, .lang-select:hover, .voice-btn:hover {
+        .unit-toggle:hover, .lang-select:hover, .voice-btn:hover, .mode-btn:hover {
             background: rgba(255, 255, 255, 0.3);
             transform: scale(1.05);
+        }
+
+        .mode-btn.active {
+            background: rgba(34, 197, 94, 0.6);
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+        }
+
+        .mode-btn.api-mode.active {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .mode-btn.demo-mode.active {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
         }
 
         .voice-btn {
@@ -170,6 +183,10 @@
             gap: 1rem;
             animation: slideDown 0.5s ease;
             box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+        }
+
+        .alerts-banner.info {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
         }
 
         .alert-icon {
@@ -492,7 +509,6 @@
             min-height: 400px;
         }
 
-        /* Ensure Leaflet container maintains size */
         #weather-map .leaflet-container {
             height: 400px !important;
             width: 100% !important;
@@ -656,6 +672,25 @@
             0% { transform: translateY(-5px); }
             50% { transform: translateY(10px); }
             100% { transform: translateY(-5px); }
+        }
+
+        /* Modal scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
         }
 
         /* Responsive */
