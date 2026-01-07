@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="weather.css">
 </head>
 <body>
-     <div id="loading" class="loading">
+    <div id="loading" class="loading">
         <div class="spinner"></div>
     </div>
 
@@ -28,6 +28,11 @@
                         <option value="fr">Français</option>
                     </select>
                     <input type="date" id="date-picker" class="unit-toggle" style="padding: 0.75rem 1rem;">
+                    <button class="unit-toggle" id="clear-cache" title="Clear cached city data">🗑️ Clear Cache</button>
+                    
+                    <!-- API/Demo Mode Buttons -->
+                    <button class="mode-btn api-mode active" id="api-mode-btn">🌐 API Mode</button>
+                    <button class="mode-btn demo-mode" id="demo-mode-btn">🎭 Demo Mode</button>
                 </div>
                 <button class="voice-btn" id="voice-btn">
                     <span>🎤</span>
@@ -45,7 +50,7 @@
                         type="text" 
                         id="search-input" 
                         class="search-input" 
-                        placeholder="Search for a city..."
+                        placeholder="Search city, neighborhood, or local area..."
                     >
                     <button class="search-btn" id="search-btn">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
