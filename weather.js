@@ -1,4 +1,7 @@
- const state = {
+// API Configuration - Using Free APIs (No Key Required)
+        let USE_API = localStorage.getItem('use_api') !== 'false'; // Default to API mode
+
+        const state = {
             weather: null,
             forecast: [],
             particles: [],
@@ -16,27 +19,27 @@
             en: {
                 voiceAssistant: 'Voice Assistant',
                 listening: 'Listening...',
-                searchPlaceholder: 'Search for a city...'
+                searchPlaceholder: 'Search city, neighborhood, or local area...'
             },
             hi: {
                 voiceAssistant: 'वॉयस असिस्टेंट',
                 listening: 'सुन रहा है...',
-                searchPlaceholder: 'शहर खोजें...'
+                searchPlaceholder: 'शहर, मोहल्ला या स्थानीय क्षेत्र खोजें...'
             },
             bn: {
                 voiceAssistant: 'ভয়েস সহায়ক',
                 listening: 'শুনছি...',
-                searchPlaceholder: 'শহর খুঁজুন...'
+                searchPlaceholder: 'শহর, পাড়া বা স্থানীয় এলাকা খুঁজুন...'
             },
             es: {
                 voiceAssistant: 'Asistente de Voz',
                 listening: 'Escuchando...',
-                searchPlaceholder: 'Buscar una ciudad...'
+                searchPlaceholder: 'Buscar ciudad, barrio o área local...'
             },
             fr: {
                 voiceAssistant: 'Assistant Vocal',
                 listening: 'Écoute...',
-                searchPlaceholder: 'Rechercher une ville...'
+                searchPlaceholder: 'Rechercher ville, quartier ou zone locale...'
             }
         };
 
@@ -49,16 +52,334 @@
                 createCharts();
                 checkNightMode();
                 initDatePicker();
+                updateModeButtons();
                 
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('app').classList.remove('hidden');
                 
-                // Initialize map after UI is visible
                 setTimeout(() => {
                     initMap();
                 }, 500);
             }, 1000);
         });
+
+        // Update Mode Buttons Display
+        function updateModeButtons() {
+            const apiBtn = document.getElementById('api-mode-btn');
+            const demoBtn = document.getElementById('demo-mode-btn');
+            
+            if (USE_API) {
+                apiBtn.classList.add('active');
+                demoBtn.classList.remove('active');
+            } else {
+                apiBtn.classList.remove('active');
+                demoBtn.classList.add('active');
+            }
+        }
+
+        // Fetch Weather from Open-Meteo API (No Key Required!)
+        async function fetchWeatherFromAPI(city) {
+            try {
+                console.log('Fetching weather for:', city);
+                
+                // Step 1: Get coordinates using geocoding API with more results
+                const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=10&language=en&format=json`;
+                
+                console.log('Geocoding URL:', geoUrl);
+                const geoResponse = await fetch(geoUrl);
+                
+                if (!geoResponse.ok) {
+                    throw new Error(`Geocoding failed: ${geoResponse.status}`);
+                }
+                
+                const geoData = await geoResponse.json();
+                console.log('Geocoding response:', geoData);
+                
+                if (!geoData.results || geoData.results.length === 0) {
+                    throw new Error('Location not found. Try adding more details like city or country name.');
+                }
+                
+                // If multiple results, show options to user
+                if (geoData.results.length > 1) {
+                    const selectedLocation = await showLocationOptions(geoData.results);
+                    if (!selectedLocation) {
+                        throw new Error('No location selected');
+                    }
+                    var { latitude: lat, longitude: lon, name, admin1, admin2, admin3, country } = selectedLocation;
+                } else {
+                    var { latitude: lat, longitude: lon, name, admin1, admin2, admin3, country } = geoData.results[0];
+                }
+                
+                // Build detailed city name with all available admin levels
+                let cityName = name;
+                if (admin3 && admin3 !== name) cityName = `${name}, ${admin3}`;
+                else if (admin2 && admin2 !== name) cityName = `${name}, ${admin2}`;
+                else if (admin1 && admin1 !== name) cityName = `${name}, ${admin1}`;
+                
+                // Add country if not already in name
+                if (!cityName.includes(country)) {
+                    cityName = `${cityName}, ${country}`;
+                }
+                
+                console.log('Selected location:', cityName, lat, lon);
+                
+                // Step 2: Get weather from Open-Meteo (Free, No API Key!)
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,pressure_msl&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max&timezone=auto`;
+                
+                console.log('Weather URL:', weatherUrl);
+                const weatherResponse = await fetch(weatherUrl);
+                
+                if (!weatherResponse.ok) {
+                    throw new Error(`Weather API failed: ${weatherResponse.status}`);
+                }
+                
+                const weatherData = await weatherResponse.json();
+                console.log('Weather data received:', weatherData);
+                
+                if (!weatherData.current) {
+                    throw new Error('Weather data unavailable');
+                }
+                
+                // Map WMO weather codes to conditions
+                const weatherCodeMap = {
+                    0: { condition: 'sunny', description: 'Clear Sky', icon: '☀️' },
+                    1: { condition: 'sunny', description: 'Mainly Clear', icon: '🌤️' },
+                    2: { condition: 'cloudy', description: 'Partly Cloudy', icon: '⛅' },
+                    3: { condition: 'cloudy', description: 'Overcast', icon: '☁️' },
+                    45: { condition: 'cloudy', description: 'Foggy', icon: '🌫️' },
+                    48: { condition: 'cloudy', description: 'Foggy', icon: '🌫️' },
+                    51: { condition: 'rain', description: 'Light Drizzle', icon: '🌦️' },
+                    53: { condition: 'rain', description: 'Drizzle', icon: '🌦️' },
+                    55: { condition: 'rain', description: 'Heavy Drizzle', icon: '🌧️' },
+                    61: { condition: 'rain', description: 'Light Rain', icon: '🌧️' },
+                    63: { condition: 'rain', description: 'Rain', icon: '🌧️' },
+                    65: { condition: 'rain', description: 'Heavy Rain', icon: '⛈️' },
+                    71: { condition: 'snow', description: 'Light Snow', icon: '🌨️' },
+                    73: { condition: 'snow', description: 'Snow', icon: '❄️' },
+                    75: { condition: 'snow', description: 'Heavy Snow', icon: '❄️' },
+                    80: { condition: 'rain', description: 'Rain Showers', icon: '🌧️' },
+                    81: { condition: 'rain', description: 'Rain Showers', icon: '🌧️' },
+                    82: { condition: 'rain', description: 'Heavy Rain Showers', icon: '⛈️' },
+                    95: { condition: 'rain', description: 'Thunderstorm', icon: '⛈️' },
+                    96: { condition: 'rain', description: 'Thunderstorm', icon: '⛈️' },
+                    99: { condition: 'rain', description: 'Severe Thunderstorm', icon: '⛈️' }
+                };
+                
+                const weatherCode = weatherData.current.weather_code;
+                const weatherInfo = weatherCodeMap[weatherCode] || { condition: 'cloudy', description: 'Cloudy', icon: '☁️' };
+                
+                // Format times
+                const formatTime = (isoString) => {
+                    const date = new Date(isoString);
+                    let hours = date.getHours();
+                    const minutes = date.getMinutes();
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12 || 12;
+                    return `${hours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+                };
+                
+                // Update state with API data
+                state.weather = {
+                    city: cityName,
+                    temp: Math.round(weatherData.current.temperature_2m),
+                    condition: weatherInfo.condition,
+                    description: weatherInfo.description,
+                    humidity: weatherData.current.relative_humidity_2m,
+                    windSpeed: Math.round(weatherData.current.wind_speed_10m),
+                    visibility: 10, // Open-Meteo doesn't provide visibility
+                    pressure: Math.round(weatherData.current.pressure_msl),
+                    feelsLike: Math.round(weatherData.current.apparent_temperature),
+                    sunrise: formatTime(weatherData.daily.sunrise[0]),
+                    sunset: formatTime(weatherData.daily.sunset[0]),
+                    lat: parseFloat(lat),
+                    lon: parseFloat(lon)
+                };
+                
+                // Generate forecast from daily data
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                state.forecast = [];
+                
+                for (let i = 0; i < 7 && i < weatherData.daily.time.length; i++) {
+                    const date = new Date(weatherData.daily.time[i]);
+                    const dayName = days[date.getDay()];
+                    const code = weatherData.daily.weather_code[i];
+                    const info = weatherCodeMap[code] || { icon: '☁️' };
+                    
+                    state.forecast.push({
+                        day: dayName,
+                        high: Math.round(weatherData.daily.temperature_2m_max[i]),
+                        low: Math.round(weatherData.daily.temperature_2m_min[i]),
+                        icon: info.icon,
+                        rainProb: weatherData.daily.precipitation_probability_max[i] || 0
+                    });
+                }
+                
+                // Generate realistic AQI (Open-Meteo doesn't provide this)
+                state.aqi = generateAQI();
+                
+                console.log('API data processed successfully');
+                return true;
+                
+            } catch (error) {
+                console.error('API fetch error:', error);
+                throw error;
+            }
+        }
+
+        // Show location options when multiple results found
+        function showLocationOptions(locations) {
+            return new Promise((resolve) => {
+                // Create modal overlay
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.8);
+                    backdrop-filter: blur(10px);
+                    z-index: 9999;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    animation: fadeIn 0.3s ease;
+                `;
+                
+                // Create modal content
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    background: linear-gradient(135deg, #1e293b, #0f172a);
+                    border-radius: 2rem;
+                    padding: 2rem;
+                    max-width: 600px;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    animation: slideUp 0.3s ease;
+                `;
+                
+                const title = document.createElement('h2');
+                title.textContent = '📍 Multiple locations found - Select one:';
+                title.style.cssText = `
+                    color: white;
+                    margin-bottom: 1.5rem;
+                    font-size: 1.5rem;
+                    text-align: center;
+                `;
+                modal.appendChild(title);
+                
+                // Create location buttons
+                locations.forEach((location, index) => {
+                    const button = document.createElement('button');
+                    
+                    let locationText = location.name;
+                    if (location.admin3) locationText += `, ${location.admin3}`;
+                    if (location.admin2) locationText += `, ${location.admin2}`;
+                    if (location.admin1) locationText += `, ${location.admin1}`;
+                    locationText += `, ${location.country}`;
+                    
+                    // Add population if available
+                    if (location.population) {
+                        locationText += ` (Pop: ${(location.population / 1000).toFixed(0)}K)`;
+                    }
+                    
+                    button.textContent = locationText;
+                    button.style.cssText = `
+                        width: 100%;
+                        padding: 1rem 1.5rem;
+                        margin-bottom: 0.75rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        border-radius: 1rem;
+                        color: white;
+                        font-size: 1rem;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                        text-align: left;
+                    `;
+                    
+                    button.onmouseover = () => {
+                        button.style.background = 'rgba(255, 255, 255, 0.2)';
+                        button.style.transform = 'scale(1.02)';
+                    };
+                    
+                    button.onmouseout = () => {
+                        button.style.background = 'rgba(255, 255, 255, 0.1)';
+                        button.style.transform = 'scale(1)';
+                    };
+                    
+                    button.onclick = () => {
+                        document.body.removeChild(overlay);
+                        resolve(location);
+                    };
+                    
+                    modal.appendChild(button);
+                });
+                
+                // Add cancel button
+                const cancelBtn = document.createElement('button');
+                cancelBtn.textContent = '❌ Cancel';
+                cancelBtn.style.cssText = `
+                    width: 100%;
+                    padding: 1rem;
+                    margin-top: 1rem;
+                    background: rgba(239, 68, 68, 0.3);
+                    border: 1px solid rgba(239, 68, 68, 0.5);
+                    border-radius: 1rem;
+                    color: white;
+                    font-size: 1rem;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                `;
+                
+                cancelBtn.onmouseover = () => {
+                    cancelBtn.style.background = 'rgba(239, 68, 68, 0.5)';
+                };
+                
+                cancelBtn.onmouseout = () => {
+                    cancelBtn.style.background = 'rgba(239, 68, 68, 0.3)';
+                };
+                
+                cancelBtn.onclick = () => {
+                    document.body.removeChild(overlay);
+                    resolve(null);
+                };
+                
+                modal.appendChild(cancelBtn);
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+            });
+        }
+
+        // Generate AQI data
+        function generateAQI() {
+            const index = Math.floor(Math.random() * 200) + 20;
+            
+            let category, healthSuggestion;
+            if (index <= 50) {
+                category = 'Good';
+                healthSuggestion = '✅ Air quality is satisfactory. Enjoy outdoor activities!';
+            } else if (index <= 100) {
+                category = 'Moderate';
+                healthSuggestion = '⚠️ Air quality is acceptable. Sensitive individuals should limit outdoor activities.';
+            } else {
+                category = 'Unhealthy';
+                healthSuggestion = '🚨 Everyone may experience health effects. Avoid outdoor activities.';
+            }
+            
+            return {
+                index,
+                category,
+                pm25: Math.floor(index * 0.5) + Math.floor(Math.random() * 15),
+                pm10: Math.floor(index * 0.75) + Math.floor(Math.random() * 20),
+                co: index <= 50 ? (Math.random() * 0.5 + 0.1).toFixed(1) : (Math.random() * 3 + 2.5).toFixed(1),
+                no2: Math.floor(index * 0.5) + Math.floor(Math.random() * 25),
+                healthSuggestion
+            };
+        }
 
         // Date Picker
         function initDatePicker() {
@@ -146,7 +467,7 @@
             state.aqi.pm10 = Math.floor(futureAqi * 0.8) + 10;
             state.aqi.co = (Math.random() * 2 + 0.1).toFixed(1);
             state.aqi.no2 = Math.floor(futureAqi * 0.6) + 5;
-
+            state.weather.city='Thank You.';
             updateUI();
             updateAQI();
             initParticles();
@@ -212,7 +533,6 @@
 
             document.getElementById('location').textContent = weather.city;
             
-            // Update temperature with special styling for cold temps
             const tempElement = document.getElementById('temperature');
             tempElement.textContent = `${Math.round(temp)}${unit}`;
             tempElement.className = 'temperature';
@@ -288,8 +608,8 @@
             const container = document.getElementById('alerts-container');
             if (alerts && alerts.length > 0) {
                 container.innerHTML = alerts.map(alert => `
-                    <div class="alerts-banner">
-                        <div class="alert-icon">⚠️</div>
+                    <div class="alerts-banner ${alert.type || ''}">
+                        <div class="alert-icon">${alert.type === 'info' ? 'ℹ️' : '⚠️'}</div>
                         <div class="alert-text">${alert.message}</div>
                     </div>
                 `).join('');
@@ -358,7 +678,7 @@
             requestAnimationFrame(animateParticles);
         }
 
-        // Initialize Map - FIXED VERSION WITH BETTER ERROR HANDLING
+        // Initialize Map
         function initMap() {
             const { weather } = state;
             
@@ -368,14 +688,12 @@
                 return;
             }
 
-            // Ensure container is ready
             if (mapElement.offsetWidth === 0) {
                 console.log('Map container not ready, retrying...');
                 setTimeout(() => initMap(), 200);
                 return;
             }
 
-            // Remove existing map if any
             if (state.map) {
                 try {
                     state.map.off();
@@ -386,11 +704,9 @@
                 state.map = null;
             }
 
-            // Clear any existing content
             mapElement.innerHTML = '';
 
             try {
-                // Create map with proper initialization
                 state.map = L.map('weather-map', {
                     center: [weather.lat, weather.lon],
                     zoom: 10,
@@ -399,14 +715,12 @@
                     dragging: true
                 });
 
-                // Add OpenStreetMap tiles
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     maxZoom: 19,
                     minZoom: 3
                 }).addTo(state.map);
 
-                // Add custom weather marker
                 const weatherIcon = L.divIcon({
                     className: 'custom-weather-marker',
                     html: `<div style="font-size: 40px; filter: drop-shadow(0 0 5px rgba(0,0,0,0.5));">${document.getElementById('main-icon').textContent}</div>`,
@@ -419,7 +733,6 @@
                     title: weather.city
                 }).addTo(state.map);
                 
-                // Create detailed popup
                 const tempDisplay = state.unit === 'C' ? 
                     `${weather.temp}°C` : 
                     `${Math.round((weather.temp * 9/5) + 32)}°F`;
@@ -436,7 +749,6 @@
                     </div>
                 `).openPopup();
 
-                // Add weather condition circle
                 const circleColor = weather.condition === 'rain' ? '#3b82f6' : 
                                    weather.condition === 'sunny' ? '#fb923c' : 
                                    weather.condition === 'snow' ? '#93c5fd' : '#6b7280';
@@ -449,33 +761,6 @@
                     weight: 2
                 }).addTo(state.map);
 
-                // Add wind direction indicator (pointing in wind direction)
-                const windEndLat = weather.lat + 0.08 * Math.cos(Math.random() * Math.PI * 2);
-                const windEndLon = weather.lon + 0.08 * Math.sin(Math.random() * Math.PI * 2);
-                
-                L.polyline([
-                    [weather.lat, weather.lon],
-                    [windEndLat, windEndLon]
-                ], {
-                    color: 'white',
-                    weight: 3,
-                    opacity: 0.8,
-                    dashArray: '10, 5'
-                }).addTo(state.map);
-
-                // Add arrow head for wind direction
-                L.circleMarker([windEndLat, windEndLon], {
-                    radius: 6,
-                    fillColor: 'white',
-                    fillOpacity: 0.9,
-                    color: 'white',
-                    weight: 2
-                }).addTo(state.map).bindTooltip(`Wind: ${weather.windSpeed} km/h`, {
-                    permanent: false,
-                    direction: 'top'
-                });
-
-                // Force map to render properly with multiple attempts
                 setTimeout(() => {
                     if (state.map) {
                         state.map.invalidateSize();
@@ -492,25 +777,11 @@
                 console.log('Map initialized successfully for', weather.city);
             } catch (error) {
                 console.error('Map initialization error:', error);
-                // Fallback display
-                mapElement.innerHTML = `
-                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; background: rgba(255,255,255,0.1); border-radius: 1rem; color: white; font-size: 18px;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 64px; margin-bottom: 15px;">🗺️</div>
-                            <div style="font-size: 24px; font-weight: bold; margin-bottom: 8px;">${weather.city}</div>
-                            <div style="font-size: 16px; opacity: 0.9; margin-bottom: 8px;">${weather.description}</div>
-                            <div style="font-size: 14px; opacity: 0.7;">
-                                📍 Lat: ${weather.lat.toFixed(4)}, Lon: ${weather.lon.toFixed(4)}
-                            </div>
-                        </div>
-                    </div>
-                `;
             }
         }
 
-        // Create Charts - FIXED VERSION
+        // Create Charts
         function createCharts() {
-            // Destroy existing charts
             if (state.tempChart) {
                 state.tempChart.destroy();
                 state.tempChart = null;
@@ -522,42 +793,36 @@
 
             const baseTemp = state.weather.temp;
             
-            // Generate realistic 24-hour temperature data (every 3 hours)
             const tempData = [];
             const hourLabels = [];
             
-            // Temperature variation based on weather condition
-            let tempVariation = 5; // Default variation
+            let tempVariation = 5;
             if (state.weather.condition === 'sunny') {
-                tempVariation = 8; // Larger day-night variation
+                tempVariation = 8;
             } else if (state.weather.condition === 'cloudy') {
-                tempVariation = 4; // Smaller variation
+                tempVariation = 4;
             } else if (state.weather.condition === 'rain') {
-                tempVariation = 3; // Minimal variation
+                tempVariation = 3;
             }
             
             for (let hour = 0; hour < 24; hour += 3) {
                 let temp;
-                // Simulate realistic daily temperature cycle
-                if (hour === 0 || hour === 21) temp = baseTemp - tempVariation * 0.8;      // Midnight/9PM - cool
-                else if (hour === 3) temp = baseTemp - tempVariation;                      // 3 AM - coldest
-                else if (hour === 6) temp = baseTemp - tempVariation * 0.6;                // 6 AM - sunrise
-                else if (hour === 9) temp = baseTemp;                                      // 9 AM - warming
-                else if (hour === 12) temp = baseTemp + tempVariation * 0.6;               // Noon - hot
-                else if (hour === 15) temp = baseTemp + tempVariation * 0.8;               // 3 PM - hottest
-                else if (hour === 18) temp = baseTemp + tempVariation * 0.2;               // 6 PM - cooling
+                if (hour === 0 || hour === 21) temp = baseTemp - tempVariation * 0.8;
+                else if (hour === 3) temp = baseTemp - tempVariation;
+                else if (hour === 6) temp = baseTemp - tempVariation * 0.6;
+                else if (hour === 9) temp = baseTemp;
+                else if (hour === 12) temp = baseTemp + tempVariation * 0.6;
+                else if (hour === 15) temp = baseTemp + tempVariation * 0.8;
+                else if (hour === 18) temp = baseTemp + tempVariation * 0.2;
                 
-                // Convert to selected unit
                 const displayTemp = state.unit === 'C' ? Math.round(temp) : Math.round((temp * 9/5) + 32);
                 tempData.push(displayTemp);
                 
-                // Format hour labels
                 const ampm = hour < 12 ? 'AM' : 'PM';
                 const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
                 hourLabels.push(`${displayHour}${ampm}`);
             }
 
-            // Temperature Chart
             const tempCtx = document.getElementById('temp-chart');
             if (tempCtx) {
                 state.tempChart = new Chart(tempCtx.getContext('2d'), {
@@ -575,83 +840,31 @@
                             pointHoverRadius: 8,
                             pointBackgroundColor: 'rgba(251, 146, 60, 1)',
                             pointBorderColor: 'white',
-                            pointBorderWidth: 2,
-                            pointHoverBackgroundColor: 'rgba(251, 146, 60, 1)',
-                            pointHoverBorderColor: 'white',
-                            pointHoverBorderWidth: 3
+                            pointBorderWidth: 2
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        interaction: {
-                            intersect: false,
-                            mode: 'index'
-                        },
                         plugins: {
                             legend: { 
-                                display: true,
-                                labels: { 
-                                    color: 'white',
-                                    font: { size: 14, weight: 'bold' },
-                                    padding: 15
-                                } 
-                            },
-                            tooltip: {
-                                backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                                titleColor: 'white',
-                                bodyColor: 'white',
-                                borderColor: 'rgba(251, 146, 60, 1)',
-                                borderWidth: 2,
-                                padding: 12,
-                                displayColors: false,
-                                titleFont: { size: 14, weight: 'bold' },
-                                bodyFont: { size: 13 },
-                                callbacks: {
-                                    title: (context) => `${context[0].label}`,
-                                    label: (context) => `Temperature: ${context.parsed.y}°${state.unit}`,
-                                    afterLabel: (context) => {
-                                        const idx = context.dataIndex;
-                                        if (idx === tempData.indexOf(Math.max(...tempData))) return '🔥 Hottest';
-                                        if (idx === tempData.indexOf(Math.min(...tempData))) return '❄️ Coldest';
-                                        return '';
-                                    }
-                                }
+                                labels: { color: 'white', font: { size: 14, weight: 'bold' } } 
                             }
                         },
                         scales: {
                             y: {
-                                beginAtZero: false,
-                                ticks: { 
-                                    color: 'white',
-                                    font: { size: 12, weight: 'bold' },
-                                    callback: (value) => value + '°',
-                                    padding: 8
-                                },
-                                grid: { 
-                                    color: 'rgba(255, 255, 255, 0.15)',
-                                    lineWidth: 1
-                                },
-                                border: { display: false }
+                                ticks: { color: 'white', callback: (value) => value + '°' },
+                                grid: { color: 'rgba(255, 255, 255, 0.15)' }
                             },
                             x: {
-                                ticks: { 
-                                    color: 'white',
-                                    font: { size: 11, weight: 'bold' },
-                                    padding: 8
-                                },
-                                grid: { 
-                                    color: 'rgba(255, 255, 255, 0.1)',
-                                    lineWidth: 1
-                                },
-                                border: { display: false }
+                                ticks: { color: 'white' },
+                                grid: { color: 'rgba(255, 255, 255, 0.1)' }
                             }
                         }
                     }
                 });
             }
 
-            // Rain Probability Chart
             const rainData = state.forecast.map(day => day.rainProb);
             const dayLabels = state.forecast.map(day => day.day);
 
@@ -664,145 +877,59 @@
                         datasets: [{
                             label: 'Rain Probability (%)',
                             data: rainData,
-                            backgroundColor: rainData.map(val => 
-                                val > 70 ? 'rgba(37, 99, 235, 0.8)' :     // High - dark blue
-                                val > 40 ? 'rgba(59, 130, 246, 0.7)' :    // Medium - medium blue
-                                'rgba(96, 165, 250, 0.6)'                  // Low - light blue
-                            ),
-                            borderColor: rainData.map(val => 
-                                val > 70 ? 'rgba(37, 99, 235, 1)' : 
-                                val > 40 ? 'rgba(59, 130, 246, 1)' : 
-                                'rgba(96, 165, 250, 1)'
-                            ),
+                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                            borderColor: 'rgba(59, 130, 246, 1)',
                             borderWidth: 2,
-                            borderRadius: 10,
-                            borderSkipped: false
+                            borderRadius: 10
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        interaction: {
-                            intersect: false,
-                            mode: 'index'
-                        },
                         plugins: {
                             legend: { 
-                                display: true,
-                                labels: { 
-                                    color: 'white',
-                                    font: { size: 14, weight: 'bold' },
-                                    padding: 15
-                                } 
-                            },
-                            tooltip: {
-                                backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                                titleColor: 'white',
-                                bodyColor: 'white',
-                                borderColor: 'rgba(59, 130, 246, 1)',
-                                borderWidth: 2,
-                                padding: 12,
-                                displayColors: false,
-                                titleFont: { size: 14, weight: 'bold' },
-                                bodyFont: { size: 13 },
-                                callbacks: {
-                                    title: (context) => `${context[0].label}`,
-                                    label: (context) => `Rain Chance: ${context.parsed.y}%`,
-                                    afterLabel: (context) => {
-                                        const val = context.parsed.y;
-                                        if (val > 70) return '⛈️ High Chance - Bring Umbrella!';
-                                        if (val > 40) return '🌧️ Moderate Chance';
-                                        if (val > 0) return '🌤️ Low Chance';
-                                        return '☀️ No Rain Expected';
-                                    }
-                                }
+                                labels: { color: 'white', font: { size: 14, weight: 'bold' } } 
                             }
                         },
                         scales: {
                             y: {
                                 beginAtZero: true,
                                 max: 100,
-                                ticks: { 
-                                    color: 'white',
-                                    font: { size: 12, weight: 'bold' },
-                                    callback: (value) => value + '%',
-                                    stepSize: 20,
-                                    padding: 8
-                                },
-                                grid: { 
-                                    color: 'rgba(255, 255, 255, 0.15)',
-                                    lineWidth: 1
-                                },
-                                border: { display: false }
+                                ticks: { color: 'white', callback: (value) => value + '%' },
+                                grid: { color: 'rgba(255, 255, 255, 0.15)' }
                             },
                             x: {
-                                ticks: { 
-                                    color: 'white',
-                                    font: { size: 12, weight: 'bold' },
-                                    padding: 8
-                                },
-                                grid: { 
-                                    display: false
-                                },
-                                border: { display: false }
+                                ticks: { color: 'white' },
+                                grid: { display: false }
                             }
                         }
                     }
                 });
             }
-
-            console.log('Charts created successfully');
         }
 
         // Voice Assistant
         function initVoiceAssistant() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                speak('Sorry, speech recognition is not supported in your browser. Please try Chrome or Edge.');
                 alert('Speech recognition not supported. Please use Chrome, Edge, or Safari.');
                 return;
             }
 
             const recognition = new SpeechRecognition();
-            
-            const langMap = {
-                'en': 'en-US',
-                'hi': 'hi-IN',
-                'bn': 'bn-IN',
-                'es': 'es-ES',
-                'fr': 'fr-FR'
-            };
-            
-            recognition.lang = langMap[state.language] || 'en-US';
+            recognition.lang = 'en-US';
             recognition.continuous = false;
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
 
             recognition.onstart = () => {
                 state.isListening = true;
                 document.getElementById('voice-btn').classList.add('listening');
-                document.getElementById('voice-text').textContent = translations[state.language].listening;
+                document.getElementById('voice-text').textContent = 'Listening...';
             };
 
             recognition.onend = () => {
                 state.isListening = false;
                 document.getElementById('voice-btn').classList.remove('listening');
-                document.getElementById('voice-text').textContent = translations[state.language].voiceAssistant;
-            };
-
-            recognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
-                state.isListening = false;
-                document.getElementById('voice-btn').classList.remove('listening');
-                document.getElementById('voice-text').textContent = translations[state.language].voiceAssistant;
-                
-                if (event.error === 'no-speech') {
-                    speak('I did not hear anything. Please try again.');
-                } else if (event.error === 'not-allowed') {
-                    speak('Microphone access denied. Please enable microphone permissions.');
-                } else {
-                    speak('Sorry, there was an error. Please try again.');
-                }
+                document.getElementById('voice-text').textContent = 'Voice Assistant';
             };
 
             recognition.onresult = (event) => {
@@ -810,329 +937,137 @@
                 handleVoiceCommand(transcript);
             };
 
-            try {
-                recognition.start();
-            } catch (error) {
-                console.error('Failed to start recognition:', error);
-                speak('Failed to start voice recognition. Please try again.');
-            }
+            recognition.start();
         }
 
         function handleVoiceCommand(command) {
             let response = '';
 
-            if (command.includes('weather') || command.includes('temperature') || command.includes('मौसम') || command.includes('तापमान') || command.includes('আবহাওয়া') || command.includes('তাপমাত্রা')) {
-                const unit = state.unit === 'C' ? 'degrees Celsius' : 'degrees Fahrenheit';
-                const temp = state.unit === 'C' ? state.weather.temp : Math.round((state.weather.temp * 9/5) + 32);
-                response = `The current temperature in ${state.weather.city} is ${temp} ${unit}. The weather is ${state.weather.description}. Humidity is ${state.weather.humidity} percent and wind speed is ${state.weather.windSpeed} kilometers per hour.`;
-            } 
-            else if (command.includes('forecast') || command.includes('tomorrow') || command.includes('week') || command.includes('पूर्वानुमान') || command.includes('कल') || command.includes('পূর্বাভাস') || command.includes('আগামীকাল')) {
-                const tomorrow = state.forecast[1];
-                response = `Tomorrow's forecast for ${state.weather.city}: High of ${tomorrow.high} degrees, low of ${tomorrow.low} degrees, with ${tomorrow.rainProb} percent chance of rain.`;
-            }
-            else if (command.includes('air quality') || command.includes('pollution') || command.includes('aqi') || command.includes('वायु गुणवत्ता') || command.includes('বায়ুর গুণমান') || command.includes('দূষণ')) {
-                response = `The air quality index in ${state.weather.city} is ${state.aqi.index}, which is ${state.aqi.category}. ${state.aqi.healthSuggestion}`;
-            }
-            else if (command.includes('sunrise') || command.includes('sunset') || command.includes('सूर्योदय') || command.includes('সূর্যোদয়') || command.includes('সূর্যাস্ত')) {
-                response = `In ${state.weather.city}, sunrise is at ${state.weather.sunrise} and sunset is at ${state.weather.sunset}.`;
-            }
-            else if (command.includes('search') || command.includes('find') || command.includes('show') || command.includes('खोज') || command.includes('খুঁজুন')) {
-                const words = command.split(' ');
-                const cityIndex = words.findIndex(w => w === 'for' || w === 'weather' || w === 'in');
-                if (cityIndex !== -1 && words[cityIndex + 1]) {
-                    const city = words.slice(cityIndex + 1).join(' ');
-                    document.getElementById('search-input').value = city;
-                    searchWeather();
-                    response = `Searching weather for ${city}...`;
-                } else {
-                    response = 'Please say the city name. For example, say "search for Delhi" or "show weather in Mumbai".';
-                }
-            }
-            else if (command.includes('help') || command.includes('what can') || command.includes('मदद') || command.includes('সাহায্য')) {
-                response = 'I can help you with weather information. You can ask about current weather, temperature, forecast, air quality, sunrise and sunset times, or search for a specific city.';
-            }
-            else {
-                response = `I heard "${command}". Try saying "What's the weather?", "Show forecast", "Air quality", or "Search for Delhi".`;
+            if (command.includes('weather') || command.includes('temperature')) {
+                response = `The temperature in ${state.weather.city} is ${state.weather.temp} degrees.It seems ${state.weather.description}.It feels like${state.weather.feelsLike}.
+                the sun rises at ${state.weather.sunrise} and sun will set at ${state.weather.sunset}.Humidity is${state.weather.humidity},Wind speed is ${state.weather.windSpeed},visibility is ${state.weather.visibility}and pressure is ${state.weather.pressure},
+                So the waether is ${state.aqi.category},${state.aqi.healthSuggestion},Thank You, Have a good day!`;
+            } else if (command.includes('forecast')) {
+                response = `Tomorrow's forecast: High of ${state.forecast[1].high}, low of ${state.forecast[1].low}. Thank You.`;
+            } else {
+                response = `I heard "${command}". Try asking about weather or forecast.`;
             }
 
             speak(response);
         }
 
         function speak(text) {
-            window.speechSynthesis.cancel();
-            
             const utterance = new SpeechSynthesisUtterance(text);
-            
-            const langMap = {
-                'en': 'en-US',
-                'hi': 'hi-IN',
-                'bn': 'bn-IN',
-                'es': 'es-ES',
-                'fr': 'fr-FR'
-            };
-            
-            utterance.lang = langMap[state.language] || 'en-US';
-            utterance.rate = 0.9;
-            utterance.pitch = 1;
-            utterance.volume = 1;
-
-            const voices = window.speechSynthesis.getVoices();
-            const targetLang = utterance.lang.split('-')[0];
-            const voice = voices.find(v => v.lang.startsWith(targetLang)) || voices[0];
-            if (voice) {
-                utterance.voice = voice;
-            }
-
             window.speechSynthesis.speak(utterance);
         }
 
-        if (window.speechSynthesis.onvoiceschanged !== undefined) {
-            window.speechSynthesis.onvoiceschanged = () => {
-                window.speechSynthesis.getVoices();
-            };
-        }
-
-        // Search
-        function searchWeather() {
+        // Search Weather
+        async function searchWeather() {
             const input = document.getElementById('search-input');
             const city = input.value.trim();
             
-            if (!city) return;
+            if (!city) {
+                displayAlerts([{ type: 'info', message: '⚠️ Please enter a city name' }]);
+                setTimeout(() => displayAlerts([]), 2000);
+                return;
+            }
 
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('app').classList.add('hidden');
 
-            setTimeout(() => {
-                const cityLower = city.toLowerCase().trim();
-                state.weather.city = city;
+            try {
+                // Check cache first
+                const cachedCities = JSON.parse(localStorage.getItem('weatherCityCache') || '{}');
+                const cacheKey = city.toLowerCase();
+                const now = Date.now();
+                const cacheExpiry = 30 * 60 * 1000; // 30 minutes
                 
-                // Predefined cities database with realistic temperature ranges
-                const cityData = {
-                    'kashmir': { lat: 34.0837, lon: 74.7973, min: -8, max: 15, zone: 'Mountain' },
-                    'srinagar': { lat: 34.0837, lon: 74.7973, min: -4, max: 18, zone: 'Mountain' },
-                    'darjeeling': { lat: 27.0360, lon: 88.2627, min: 2, max: 18, zone: 'Hill Station' },
-                    'shimla': { lat: 31.1048, lon: 77.1734, min: -2, max: 20, zone: 'Hill Station' },
-                    'manali': { lat: 32.2396, lon: 77.1887, min: -5, max: 15, zone: 'Mountain' },
-                    'ladakh': { lat: 34.1526, lon: 77.5771, min: -20, max: 10, zone: 'Cold Desert' },
-                    'leh': { lat: 34.1526, lon: 77.5771, min: -15, max: 12, zone: 'Cold Desert' },
-                    'gulmarg': { lat: 34.0484, lon: 74.3805, min: -10, max: 8, zone: 'High Mountain' },
-                    'auli': { lat: 30.5239, lon: 79.5640, min: -8, max: 10, zone: 'High Mountain' },
-                    'nainital': { lat: 29.3803, lon: 79.4636, min: 0, max: 20, zone: 'Hill Station' },
-                    'mussoorie': { lat: 30.4598, lon: 78.0644, min: 1, max: 22, zone: 'Hill Station' },
-                    'delhi': { lat: 28.7041, lon: 77.1025, min: 8, max: 42, zone: 'Subtropical' },
-                    'mumbai': { lat: 19.0760, lon: 72.8777, min: 18, max: 36, zone: 'Coastal' },
-                    'kolkata': { lat: 22.5726, lon: 88.3639, min: 15, max: 38, zone: 'Tropical' },
-                    'moscow': { lat: 55.7558, lon: 37.6173, min: -15, max: 25, zone: 'Continental' },
-                    'london': { lat: 51.5074, lon: -0.1278, min: 2, max: 25, zone: 'Temperate' },
-                    'new york': { lat: 40.7128, lon: -74.0060, min: -10, max: 32, zone: 'Continental' },
-                    'tokyo': { lat: 35.6762, lon: 139.6503, min: 0, max: 35, zone: 'Temperate' }
-                };
-                
-                let baseTemp, climateZone, foundCity = null;
-                
-                // Find matching city
-                for (const [key, value] of Object.entries(cityData)) {
-                    if (cityLower.includes(key) || key.includes(cityLower)) {
-                        foundCity = value;
-                        state.weather.lat = value.lat;
-                        state.weather.lon = value.lon;
-                        climateZone = value.zone;
-                        
-                        // Calculate seasonal temperature
-                        const month = new Date().getMonth();
-                        const tempRange = foundCity.max - foundCity.min;
-                        const midTemp = foundCity.min + tempRange / 2;
-                        
-                        let seasonFactor = 0;
-                        if (value.lat > 0) {
-                            if (month >= 11 || month <= 2) seasonFactor = -0.3;
-                            else if (month >= 6 && month <= 8) seasonFactor = 0.3;
-                        }
-                        
-                        baseTemp = Math.round(midTemp + (tempRange * seasonFactor) + (Math.random() * 6 - 3));
-                        baseTemp = Math.max(foundCity.min, Math.min(foundCity.max, baseTemp));
-                        break;
-                    }
-                }
-                
-                if (!foundCity) {
-                    // Random location
-                    const baseLat = 37.7749 + (Math.random() - 0.5) * 100;
-                    state.weather.lat = baseLat;
-                    state.weather.lon = -122.4194 + (Math.random() - 0.5) * 360;
+                if (cachedCities[cacheKey] && (now - cachedCities[cacheKey].timestamp < cacheExpiry)) {
+                    console.log('Using cached data');
+                    const cached = cachedCities[cacheKey];
+                    state.weather = cached.weather;
+                    state.aqi = cached.aqi;
+                    state.forecast = cached.forecast;
                     
-                    if (Math.abs(baseLat) > 66) {
-                        climateZone = 'Polar';
-                        baseTemp = Math.floor(Math.random() * 35) - 30;
-                    } else if (Math.abs(baseLat) > 45) {
-                        climateZone = 'Cold Temperate';
-                        baseTemp = Math.floor(Math.random() * 30) - 15;
-                    } else if (Math.abs(baseLat) > 23) {
-                        climateZone = 'Temperate';
-                        baseTemp = Math.floor(Math.random() * 25);
-                    } else {
-                        climateZone = 'Tropical';
-                        baseTemp = Math.floor(Math.random() * 20) + 15;
-                    }
-                }
-                
-                state.weather.temp = baseTemp;
-                state.weather.climateZone = climateZone;
-                
-                // Weather condition based on temperature
-                if (state.weather.temp < -5) {
-                    state.weather.condition = Math.random() > 0.3 ? 'snow' : 'cloudy';
-                    state.weather.description = state.weather.condition === 'snow' ? 'Snowy' : 'Overcast';
-                } else if (state.weather.temp < 10) {
-                    state.weather.condition = ['cloudy', 'rain'][Math.floor(Math.random() * 2)];
-                    state.weather.description = state.weather.condition === 'rain' ? 'Cold Rain' : 'Cloudy';
-                } else if (state.weather.temp < 20) {
-                    state.weather.condition = ['sunny', 'cloudy', 'rain'][Math.floor(Math.random() * 3)];
-                    if (state.weather.condition === 'sunny') state.weather.description = 'Partly Sunny';
-                    else if (state.weather.condition === 'cloudy') state.weather.description = 'Partly Cloudy';
-                    else state.weather.description = 'Light Rain';
+                    const cacheAge = Math.round((now - cached.timestamp) / 60000);
+                    displayAlerts([{ type: 'info', message: `📦 Cached data (${cacheAge}m old)` }]);
+                    setTimeout(() => displayAlerts([]), 3000);
+                } else if (USE_API) {
+                    // Fetch from API
+                    console.log('Fetching from API...');
+                    await fetchWeatherFromAPI(city);
+                    
+                    // Cache the result
+                    cachedCities[cacheKey] = {
+                        weather: state.weather,
+                        aqi: state.aqi,
+                        forecast: state.forecast,
+                        timestamp: now
+                    };
+                    localStorage.setItem('weatherCityCache', JSON.stringify(cachedCities));
+                    
+                    displayAlerts([{ type: 'info', message: `🌐 Live data: ${state.weather.temp}°C` }]);
+                    setTimeout(() => displayAlerts([]), 3000);
                 } else {
-                    state.weather.condition = Math.random() > 0.3 ? 'sunny' : 'cloudy';
-                    state.weather.description = state.weather.condition === 'sunny' ? 'Clear Sky' : 'Partly Cloudy';
+                    // Demo mode - generate demo data
+                    console.log('Demo mode active');
+                    state.weather.city = city;
+                    displayAlerts([{ type: 'info', message: '🎭 Demo Mode - Enable API Mode for real data' }]);
+                    setTimeout(() => displayAlerts([]), 3000);
                 }
                 
-                // Update weather details
-                state.weather.humidity = 40 + Math.floor(Math.random() * 50);
-                state.weather.windSpeed = 5 + Math.floor(Math.random() * 25);
-                state.weather.visibility = 5 + Math.floor(Math.random() * 10);
-                state.weather.pressure = 990 + Math.floor(Math.random() * 40);
-                state.weather.feelsLike = state.weather.temp - Math.floor(Math.random() * 5);
-                
-                // Update sunrise/sunset based on latitude
-                const latitude = state.weather.lat;
-                let sunriseHour, sunriseMin, sunsetHour, sunsetMin;
-                
-                if (latitude > 23) {
-                    sunriseHour = 5 + Math.floor(Math.random() * 2);
-                    sunsetHour = 18 + Math.floor(Math.random() * 2);
-                } else if (latitude > -23) {
-                    sunriseHour = 6;
-                    sunsetHour = 18;
-                } else {
-                    sunriseHour = 5 + Math.floor(Math.random() * 3);
-                    sunsetHour = 17 + Math.floor(Math.random() * 2);
-                }
-                
-                sunriseMin = Math.floor(Math.random() * 60);
-                sunsetMin = Math.floor(Math.random() * 60);
-                
-                state.weather.sunrise = `${sunriseHour}:${sunriseMin.toString().padStart(2, '0')} AM`;
-                state.weather.sunset = `${sunsetHour - 12}:${sunsetMin.toString().padStart(2, '0')} PM`;
-
-                // Generate new AQI data based on city (simulate different pollution levels)
-                state.aqi.index = Math.floor(Math.random() * 200) + 20; // Range: 20-220
-                
-                // Update AQI category based on index
-                if (state.aqi.index <= 50) {
-                    state.aqi.category = 'Good';
-                    state.aqi.healthSuggestion = '✅ Air quality is satisfactory. Enjoy outdoor activities!';
-                } else if (state.aqi.index <= 100) {
-                    state.aqi.category = 'Moderate';
-                    state.aqi.healthSuggestion = '⚠️ Air quality is acceptable. Sensitive individuals should consider limiting prolonged outdoor activities.';
-                } else if (state.aqi.index <= 150) {
-                    state.aqi.category = 'Unhealthy for Sensitive Groups';
-                    state.aqi.healthSuggestion = '⚠️ Members of sensitive groups may experience health effects. The general public is less likely to be affected.';
-                } else if (state.aqi.index <= 200) {
-                    state.aqi.category = 'Unhealthy';
-                    state.aqi.healthSuggestion = '🚨 Everyone may begin to experience health effects. Sensitive groups should avoid outdoor activities.';
-                } else {
-                    state.aqi.category = 'Very Unhealthy';
-                    state.aqi.healthSuggestion = '🚨 Health alert: everyone may experience serious health effects. Avoid outdoor activities!';
-                }
-                
-                // Update individual pollutants based on AQI index
-                // PM2.5 (Fine particulate matter) - typically 40-60% of AQI
-                state.aqi.pm25 = Math.floor(state.aqi.index * 0.5) + Math.floor(Math.random() * 15);
-                
-                // PM10 (Coarse particulate matter) - typically 60-90% of AQI  
-                state.aqi.pm10 = Math.floor(state.aqi.index * 0.75) + Math.floor(Math.random() * 20);
-                
-                // CO (Carbon Monoxide) - measured in ppm, varies 0.1 to 5.0+
-                if (state.aqi.index <= 50) {
-                    state.aqi.co = (Math.random() * 0.5 + 0.1).toFixed(1);
-                } else if (state.aqi.index <= 100) {
-                    state.aqi.co = (Math.random() * 1.5 + 0.5).toFixed(1);
-                } else if (state.aqi.index <= 150) {
-                    state.aqi.co = (Math.random() * 2 + 1.5).toFixed(1);
-                } else {
-                    state.aqi.co = (Math.random() * 3 + 2.5).toFixed(1);
-                }
-                
-                // NO2 (Nitrogen Dioxide) - typically 30-70% of AQI
-                state.aqi.no2 = Math.floor(state.aqi.index * 0.5) + Math.floor(Math.random() * 25);
-
-                // Update forecast for the new city
-                state.forecast = [
-                    { day: 'Mon', high: state.weather.temp + Math.floor(Math.random() * 5), low: state.weather.temp - Math.floor(Math.random() * 5), icon: ['☀️', '⛅', '☁️'][Math.floor(Math.random() * 3)], rainProb: Math.floor(Math.random() * 40) },
-                    { day: 'Tue', high: state.weather.temp + Math.floor(Math.random() * 5), low: state.weather.temp - Math.floor(Math.random() * 5), icon: ['☀️', '⛅', '☁️'][Math.floor(Math.random() * 3)], rainProb: Math.floor(Math.random() * 50) },
-                    { day: 'Wed', high: state.weather.temp + Math.floor(Math.random() * 5), low: state.weather.temp - Math.floor(Math.random() * 5), icon: ['⛅', '☁️', '🌧️'][Math.floor(Math.random() * 3)], rainProb: Math.floor(Math.random() * 80) + 20 },
-                    { day: 'Thu', high: state.weather.temp + Math.floor(Math.random() * 5), low: state.weather.temp - Math.floor(Math.random() * 5), icon: ['☁️', '⛅'][Math.floor(Math.random() * 2)], rainProb: Math.floor(Math.random() * 60) },
-                    { day: 'Fri', high: state.weather.temp + Math.floor(Math.random() * 6), low: state.weather.temp - Math.floor(Math.random() * 4), icon: ['☀️', '⛅'][Math.floor(Math.random() * 2)], rainProb: Math.floor(Math.random() * 30) },
-                    { day: 'Sat', high: state.weather.temp + Math.floor(Math.random() * 6), low: state.weather.temp - Math.floor(Math.random() * 4), icon: ['☀️', '⛅'][Math.floor(Math.random() * 2)], rainProb: Math.floor(Math.random() * 20) },
-                    { day: 'Sun', high: state.weather.temp + Math.floor(Math.random() * 5), low: state.weather.temp - Math.floor(Math.random() * 5), icon: ['☀️', '⛅', '☁️'][Math.floor(Math.random() * 3)], rainProb: Math.floor(Math.random() * 40) }
-                ];
-
                 updateUI();
                 updateAQI();
                 initParticles();
                 createCharts();
                 
-                // Show temperature info alert
-                let tempInfo = '';
-                if (state.weather.temp < 0) {
-                    tempInfo = `❄️ Freezing temperatures detected in ${city}`;
-                } else if (state.weather.temp < 10) {
-                    tempInfo = `🌡️ Cold weather in ${city} (${state.weather.climateZone})`;
-                } else if (state.weather.temp > 30) {
-                    tempInfo = `🔥 Hot weather in ${city} (${state.weather.climateZone})`;
-                }
-                
-                if (tempInfo) {
-                    displayAlerts([{ type: 'info', message: tempInfo }]);
-                    setTimeout(() => displayAlerts([]), 5000); // Clear after 5 seconds
-                }
-                
-                // Fix map reinitialization with proper cleanup
                 if (state.map) {
-                    try {
-                        state.map.off();
-                        state.map.remove();
-                        state.map = null;
-                    } catch (e) {
-                        console.log('Map cleanup:', e);
-                    }
+                    state.map.remove();
+                    state.map = null;
                 }
+                setTimeout(() => initMap(), 300);
                 
-                // Clear map container
-                const mapContainer = document.getElementById('weather-map');
-                mapContainer.innerHTML = '';
+            } catch (error) {
+                console.error('Search error:', error);
+                displayAlerts([{ type: 'info', message: `⚠️ ${error.message}` }]);
+                setTimeout(() => displayAlerts([]), 5000);
                 
-                // Reinitialize map after a short delay
-                setTimeout(() => {
-                    initMap();
-                }, 300);
-
+                // Show the app anyway with current data
+                updateUI();
+                updateAQI();
+            } finally {
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('app').classList.remove('hidden');
-            }, 800);
+            }
         }
 
         // Event Listeners
+        document.getElementById('api-mode-btn').addEventListener('click', () => {
+            USE_API = true;
+            localStorage.setItem('use_api', 'true');
+            updateModeButtons();
+            displayAlerts([{ type: 'info', message: '🌐 API Mode enabled - Real weather data' }]);
+            setTimeout(() => displayAlerts([]), 2000);
+        });
+        
+        document.getElementById('demo-mode-btn').addEventListener('click', () => {
+            USE_API = false;
+            localStorage.setItem('use_api', 'false');
+            updateModeButtons();
+            displayAlerts([{ type: 'info', message: '🎭 Demo Mode - Simulated data' }]);
+            setTimeout(() => displayAlerts([]), 2000);
+        });
+        
         document.getElementById('unit-toggle').addEventListener('click', () => {
             state.unit = state.unit === 'C' ? 'F' : 'C';
             updateUI();
             createCharts();
         });
 
-        document.getElementById('lang-select').addEventListener('change', (e) => {
-            state.language = e.target.value;
-            document.getElementById('search-input').placeholder = translations[state.language].searchPlaceholder;
-            document.getElementById('voice-text').textContent = translations[state.language].voiceAssistant;
+        document.getElementById('clear-cache').addEventListener('click', () => {
+            localStorage.removeItem('weatherCityCache');
+            displayAlerts([{ type: 'info', message: '✅ Cache cleared!' }]);
+            setTimeout(() => displayAlerts([]), 2000);
         });
 
         document.getElementById('voice-btn').addEventListener('click', initVoiceAssistant);
@@ -1148,12 +1083,6 @@
             initParticles();
             
             if (state.map) {
-                setTimeout(() => {
-                    state.map.invalidateSize();
-                }, 200);
+                setTimeout(() => state.map.invalidateSize(), 200);
             }
         });
-
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
-        }
